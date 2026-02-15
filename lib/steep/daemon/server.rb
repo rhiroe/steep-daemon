@@ -322,7 +322,7 @@ module Steep
           end
         end
 
-        sig_dir = "#{@project.base_dir}sig"
+        sig_dir = @project.base_dir / "sig"
         if sig_dir.directory?
           sig_dir.glob("**/*.rbs").each { |p| paths << p.to_s if p.file? }
         end
