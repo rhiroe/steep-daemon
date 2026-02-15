@@ -290,8 +290,8 @@ module Steep
 
       def sync_changed_files(master_writer, params)
         request_paths = [] # : Array[String]
-        (params[:code_paths] || []).each_value { |path| request_paths << path }
-        (params[:signature_paths] || []).each_value { |path| request_paths << path }
+        request_paths.concat((params[:code_paths] || []).map(&:last))
+        request_paths.concat((params[:signature_paths] || []).map(&:last))
 
         changes_map = {} # : Hash[String, Symbol]
         @file_tracker.flush_pending_changes.each { |path, type| changes_map[path] = type }
