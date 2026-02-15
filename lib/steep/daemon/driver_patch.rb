@@ -83,7 +83,7 @@ module Steep
 
       def print_typecheck_result(project:, diagnostic_notifications:, error_messages:)
         if error_messages.empty?
-          loader = Services::FileLoader.new(base_dir: project.base_dir)
+          loader = ::Steep::Services::FileLoader.new(base_dir: project.base_dir)
           all_files = project.targets.each.with_object(Set[]) do |target, set|
             set.merge(loader.load_changes(target.source_pattern, command_line_patterns, changes: {}).each_key)
             set.merge(loader.load_changes(target.signature_pattern, changes: {}).each_key)
@@ -112,8 +112,8 @@ module Steep
         params = { library_paths: [], inline_paths: [], signature_paths: [], code_paths: [] }
 
         if command_line_patterns.empty?
-          files = Server::TargetGroupFiles.new(project)
-          loader = Services::FileLoader.new(base_dir: project.base_dir)
+          files = ::Steep::Server::TargetGroupFiles.new(project)
+          loader = ::Steep::Services::FileLoader.new(base_dir: project.base_dir)
 
           project.targets.each do |target|
             target.new_env_loader.each_dir do |_, dir|
