@@ -66,7 +66,7 @@ module Steep
 
       def cleanup
         [socket_path, pid_path].each do |path|
-          File.delete(path) if File.exist?(path)
+          FileUtils.rm_f(path)
         rescue StandardError
           nil
         end
@@ -74,14 +74,14 @@ module Steep
 
       def start
         if running?
-          $stderr.puts "Steep server already running (PID: #{File.read(pid_path).strip})"
+          warn "Steep server already running (PID: #{File.read(pid_path).strip})"
           return true
         end
 
         cleanup
 
         unless Process.respond_to?(:fork)
-          $stderr.puts "fork() not available, cannot start steep server daemon"
+          warn "fork() not available, cannot start steep server daemon"
           return false
         end
 
@@ -93,7 +93,7 @@ module Steep
             log_file.sync = true
             $stdout.reopen(log_file)
             $stderr.reopen(log_file)
-            $stdin.reopen("/dev/null")
+            $stdin.reopen(File::NULL)
             run_server
           end
           exit!(0) if daemon_pid
@@ -105,17 +105,17 @@ module Steep
           sleep 0.5
           next unless running?
 
-          $stderr.puts "Steep server started (PID: #{File.read(pid_path).strip})"
+          warn "Steep server started (PID: #{File.read(pid_path).strip})"
           return true
         end
 
-        $stderr.puts "Failed to start steep server. Check log: #{log_path}"
+        warn "Failed to start steep server. Check log: #{log_path}"
         false
       end
 
       def stop
         unless File.exist?(pid_path)
-          $stderr.puts "Steep server is not running"
+          warn "Steep server is not running"
           return
         end
 
@@ -132,22 +132,22 @@ module Steep
 
         if process_alive
           Process.kill("KILL", pid)
-          $stderr.puts "Steep server did not stop gracefully, forcefully killed (PID: #{pid})"
+          warn "Steep server did not stop gracefully, forcefully killed (PID: #{pid})"
         else
-          $stderr.puts "Steep server stopped (PID: #{pid})"
+          warn "Steep server stopped (PID: #{pid})"
         end
         cleanup
       rescue Errno::ESRCH
         cleanup
-        $stderr.puts "Steep server was not running (cleaned up stale files)"
+        warn "Steep server was not running (cleaned up stale files)"
       end
 
       def status
         if running?
           pid = File.read(pid_path).to_i
-          $stderr.puts "Steep server running (PID: #{pid})"
-          $stderr.puts "  Socket: #{socket_path}"
-          $stderr.puts "  Log:    #{log_path}"
+          warn "Steep server running (PID: #{pid})"
+          warn "  Socket: #{socket_path}"
+          warn "  Log:    #{log_path}"
 
           if File.exist?(log_path)
             log_content = if File.size(log_path) > LARGE_LOG_FILE_THRESHOLD
@@ -158,18 +158,18 @@ module Steep
                           end
 
             if log_content.include?("Warm-up complete")
-              $stderr.puts "  Status: Ready"
+              warn "  Status: Ready"
             elsif log_content.include?("Warming up type checker")
-              $stderr.puts "  Status: Warming up (loading RBS environment)"
+              warn "  Status: Warming up (loading RBS environment)"
             else
-              $stderr.puts "  Status: Starting"
+              warn "  Status: Starting"
             end
           end
         else
-          $stderr.puts "Steep server is not running"
+          warn "Steep server is not running"
 
           if File.exist?(pid_path) || File.exist?(socket_path)
-            $stderr.puts "  (Found stale files - run 'steep server stop' to clean up)"
+            warn "  (Found stale files - run 'steep server stop' to clean up)"
           end
         end
       end
@@ -190,7 +190,7 @@ module Steep
         ::Steep::Project::DSL.parse(project, steep_file.read, filename: steep_file.to_s)
 
         project.targets.each do |target|
-          case result = target.options.load_collection_lock
+          case target.options.load_collection_lock
           when nil, RBS::Collection::Config::Lockfile
             # OK
           when RBS::Collection::Config::CollectionNotAvailable

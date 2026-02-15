@@ -3,9 +3,7 @@
 module Steep
   module Daemon
     class Server
-      attr_reader :config, :project
-      attr_reader :file_tracker, :shutdown_flag
-      attr_reader :warmup_status, :warmup_mutex
+      attr_reader :config, :project, :file_tracker, :shutdown_flag, :warmup_status, :warmup_mutex
 
       # SAFE: Maximum size of client request in bytes (10MB)
       # Prevents memory exhaustion from malformed or malicious requests
@@ -57,7 +55,7 @@ module Steep
 
         def track_and_detect(paths)
           @mutex.synchronize do
-            changed = [] #: Array[[String, Symbol]]
+            changed = [] # : Array[[String, Symbol]]
             paths.each do |path|
               key = path.to_s
               current = safe_mtime(key)
@@ -90,7 +88,7 @@ module Steep
         @project = project
         @shutdown_flag = false
         @file_tracker = FileTracker.new
-        @warmup_status = :not_started  # :warming_up, :ready, :failed
+        @warmup_status = :not_started # :warming_up, :ready, :failed
         @warmup_mutex = Mutex.new
       end
 
@@ -141,7 +139,7 @@ module Steep
         all_paths = collect_all_project_paths
         @file_tracker.register(all_paths)
 
-        $stderr.puts "Server ready. Tracking #{all_paths.size} files."
+        warn "Server ready. Tracking #{all_paths.size} files."
         Steep.logger.info { "Socket: #{@config.socket_path}" }
 
         # SAFE: Verify socket path is actually a socket before deleting (prevents symlink attacks)
@@ -149,22 +147,23 @@ module Steep
           unless File.socket?(@config.socket_path)
             raise "#{@config.socket_path} exists but is not a socket (possible symlink attack)"
           end
+
           File.delete(@config.socket_path)
         end
         @unix_server = UNIXServer.new(@config.socket_path)
         # SAFE: Restrict socket access to owner only (prevents unauthorized connections)
-        File.chmod(0600, @config.socket_path)
+        File.chmod(0o600, @config.socket_path)
 
         warmup_thread = Thread.new do
           Thread.current.abort_on_exception = false
           set_warmup_status(:warming_up)
-          $stderr.puts "Warming up type checker (loading gem signatures and RBS files)..."
+          warn "Warming up type checker (loading gem signatures and RBS files)..."
           Steep.logger.info { "Starting warm-up typecheck" }
           warm_typecheck_on_startup(client_writer, client_reader)
-          $stderr.puts "Warm-up complete. Ready for fast type checking."
+          warn "Warm-up complete. Ready for fast type checking."
           Steep.logger.info { "Warm-up complete" }
           set_warmup_status(:ready)
-        rescue => e
+        rescue StandardError => e
           Steep.logger.error { "Warm-up error: #{e.class}: #{e.message}" }
           Steep.logger.debug { e.backtrace.first(10).join("\n") }
           set_warmup_status(:failed)
@@ -174,8 +173,22 @@ module Steep
 
         server = @unix_server or raise
 
-        Signal.trap("TERM") { @shutdown_flag = true; server.close rescue nil }
-        Signal.trap("INT")  { @shutdown_flag = true; server.close rescue nil }
+        Signal.trap("TERM") do
+          @shutdown_flag = true
+          begin
+            server.close
+          rescue StandardError
+            nil
+          end
+        end
+        Signal.trap("INT") do
+          @shutdown_flag = true
+          begin
+            server.close
+          rescue StandardError
+            nil
+          end
+        end
 
         until @shutdown_flag
           begin
@@ -193,12 +206,17 @@ module Steep
             handle_client(client_socket, client_writer, client_reader)
           rescue IOError, Errno::EBADF
             break if @shutdown_flag
+
             raise
-          rescue => e
+          rescue StandardError => e
             Steep.logger.error { "Error handling client: #{e.class}: #{e.message}" }
             Steep.logger.debug { e.backtrace.first(10).join("\n") }
           ensure
-            client_socket&.close rescue nil
+            begin
+              client_socket&.close
+            rescue StandardError
+              nil
+            end
           end
         end
 
@@ -207,7 +225,7 @@ module Steep
         watcher_thread&.kill
         shutdown_master(client_writer, client_reader)
         master_thread.join(10)
-      rescue => e
+      rescue StandardError => e
         Steep.logger.fatal { "Fatal error: #{e.class}: #{e.message}" }
         Steep.logger.error { e.backtrace.join("\n") }
       ensure
@@ -233,9 +251,9 @@ module Steep
         if line.bytesize > MAX_REQUEST_SIZE
           Steep.logger.warn { "Request too large: #{line.bytesize} bytes (limit: #{MAX_REQUEST_SIZE})" }
           client_socket.puts(JSON.generate({
-            type: "error",
-            message: "Request too large (#{line.bytesize} bytes, limit: #{MAX_REQUEST_SIZE})"
-          }))
+                                             type: "error",
+                                             message: "Request too large (#{line.bytesize} bytes, limit: #{MAX_REQUEST_SIZE})"
+                                           }))
           return
         end
 
@@ -271,11 +289,11 @@ module Steep
       end
 
       def sync_changed_files(master_writer, params)
-        request_paths = [] #: Array[String]
-        (params[:code_paths] || []).each { |_, path| request_paths << path }
-        (params[:signature_paths] || []).each { |_, path| request_paths << path }
+        request_paths = [] # : Array[String]
+        (params[:code_paths] || []).each_value { |path| request_paths << path }
+        (params[:signature_paths] || []).each_value { |path| request_paths << path }
 
-        changes_map = {} #: Hash[String, Symbol]
+        changes_map = {} # : Hash[String, Symbol]
         @file_tracker.flush_pending_changes.each { |path, type| changes_map[path] = type }
         @file_tracker.track_and_detect(request_paths).each { |path, type| changes_map[path] = type }
 
@@ -304,7 +322,7 @@ module Steep
           end
         end
 
-        sig_dir = @project.base_dir + "sig"
+        sig_dir = "#{@project.base_dir}sig"
         if sig_dir.directory?
           sig_dir.glob("**/*.rbs").each { |p| paths << p.to_s if p.file? }
         end
@@ -326,18 +344,18 @@ module Steep
 
           has_signature_change = all_paths.any? { |p| p.end_with?(".rbs") }
 
-          Steep.logger.info { "Watcher: #{changes.size} file(s) changed" +
-                              (has_signature_change ? " (includes signatures, pre-warming...)" : "") }
+          Steep.logger.info do
+            "Watcher: #{changes.size} file(s) changed" +
+              (has_signature_change ? " (includes signatures, pre-warming...)" : "")
+          end
 
           master_writer.write(
             method: "workspace/didChangeWatchedFiles",
             params: { changes: changes }
           )
 
-          if has_signature_change
-            warm_typecheck(master_writer, master_reader)
-          end
-        rescue => e
+          warm_typecheck(master_writer, master_reader) if has_signature_change
+        rescue StandardError => e
           Steep.logger.error { "Watcher error: #{e.class}: #{e.message}" }
           Steep.logger.debug { e.backtrace.first(5).join("\n") }
         end
@@ -345,7 +363,7 @@ module Steep
         Thread.new do
           listener.start
           sleep
-        rescue => e
+        rescue StandardError => e
           Steep.logger.error { "Watcher thread error: #{e.class}: #{e.message}" }
         end
       end
@@ -374,7 +392,7 @@ module Steep
       end
 
       def collect_warmup_files
-        params = { library_paths: [], inline_paths: [], signature_paths: [], code_paths: [] } #: ::Steep::Server::CustomMethods::TypeCheck::params
+        params = { library_paths: [], inline_paths: [], signature_paths: [], code_paths: [] } # : ::Steep::Server::CustomMethods::TypeCheck::params
         loader = ::Steep::Services::FileLoader.new(base_dir: @project.base_dir)
 
         @project.targets.each do |target|
@@ -427,7 +445,7 @@ module Steep
         master_reader.read do |message|
           if message[:id] == guid
             elapsed = Time.now - start_time
-            $stderr.puts "  RBS environment loaded in #{elapsed.round(2)}s"
+            warn "  RBS environment loaded in #{elapsed.round(2)}s"
             return
           end
         end
@@ -444,7 +462,7 @@ module Steep
         writer.write(method: :shutdown, id: id)
         wait_for_response(reader, id)
         writer.write(method: :exit)
-      rescue => e
+      rescue StandardError => e
         Steep.logger.error { "Shutdown error: #{e.message}" }
       end
     end

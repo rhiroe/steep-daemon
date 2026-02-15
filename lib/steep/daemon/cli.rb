@@ -22,7 +22,7 @@ module Steep
         when "help", "--help", "-h", nil
           print_help
         else
-          $stderr.puts "Unknown command: #{command}"
+          warn "Unknown command: #{command}"
           print_help
           exit 1
         end
@@ -32,11 +32,11 @@ module Steep
 
       def start_command
         if Daemon.running?
-          $stderr.puts "Steep daemon is already running"
+          warn "Steep daemon is already running"
           exit 1
         end
 
-        $stderr.puts "Starting Steep daemon..."
+        warn "Starting Steep daemon..."
         success = Daemon.start
 
         exit(success ? 0 : 1)
@@ -44,23 +44,23 @@ module Steep
 
       def stop_command
         unless Daemon.running?
-          $stderr.puts "Steep daemon is not running"
+          warn "Steep daemon is not running"
           exit 1
         end
 
-        $stderr.puts "Stopping Steep daemon..."
+        warn "Stopping Steep daemon..."
         Daemon.stop
         exit 0
       end
 
       def restart_command
         if Daemon.running?
-          $stderr.puts "Stopping Steep daemon..."
+          warn "Stopping Steep daemon..."
           Daemon.stop
           sleep 1
         end
 
-        $stderr.puts "Starting Steep daemon..."
+        warn "Starting Steep daemon..."
         success = Daemon.start
         exit(success ? 0 : 1)
       end

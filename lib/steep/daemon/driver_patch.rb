@@ -20,11 +20,10 @@ module Steep
             return run_with_server
           elsif Daemon.starting?
             Steep.logger.info { "Daemon is starting, waiting for it to be ready" }
-            if wait_for_daemon
-              return run_with_server
-            else
-              stderr.puts Rainbow("Daemon failed to start, falling back to standard mode").yellow
-            end
+            return run_with_server if wait_for_daemon
+
+            stderr.puts Rainbow("Daemon failed to start, falling back to standard mode").yellow
+
           end
         end
 
@@ -32,16 +31,16 @@ module Steep
       end
 
       def run_with_server
-        project = load_config()
+        project = load_config
 
         stdout.puts Rainbow("# Type checking files (server mode):").bold
         stdout.puts
 
         params = build_typecheck_params(project)
 
-        Steep.logger.info {
+        Steep.logger.info do
           "Server mode: #{params[:code_paths].size} code files, #{params[:signature_paths].size} signatures"
-        }
+        end
 
         socket = UNIXSocket.new(Daemon.socket_path)
         socket.puts(JSON.generate({ params: params }))
@@ -61,9 +60,7 @@ module Steep
             stdout.flush
           when "message"
             lsp_error = LanguageServer::Protocol::Constant::MessageType::ERROR
-            if msg[:params][:type] == lsp_error
-              error_messages << msg[:params][:message]
-            end
+            error_messages << msg[:params][:message] if msg[:params][:type] == lsp_error
           when "complete"
             break
           end
@@ -74,12 +71,13 @@ module Steep
         stdout.puts
         stdout.puts
 
-        print_typecheck_result(project: project, diagnostic_notifications: diagnostic_notifications, error_messages: error_messages)
+        print_typecheck_result(project: project, diagnostic_notifications: diagnostic_notifications,
+                               error_messages: error_messages)
       rescue Errno::ECONNREFUSED, Errno::ENOENT => e
         stderr.puts "Steep server connection failed (#{e.message}), falling back to normal check"
         super
-      rescue Errno::EPIPE => error
-        stdout.puts Rainbow("Steep server connection lost: #{error.inspect}").red.bold
+      rescue Errno::EPIPE => e
+        stdout.puts Rainbow("Steep server connection lost: #{e.inspect}").red.bold
         1
       end
 
@@ -91,13 +89,12 @@ module Steep
             set.merge(loader.load_changes(target.signature_pattern, changes: {}).each_key)
           end.to_a
 
-          case
-          when with_expectations_path
+          if with_expectations_path
             print_expectations(project: project,
                                all_files: all_files,
                                expectations_path: with_expectations_path,
                                notifications: diagnostic_notifications)
-          when save_expectations_path
+          elsif save_expectations_path
             save_expectations(project: project,
                               all_files: all_files,
                               expectations_path: save_expectations_path,
@@ -128,27 +125,22 @@ module Steep
             loader.each_path_in_target(target) do |path|
               files.add_path(path)
             end
-          end
 
-          project.targets.each do |target|
             target.groups.each do |group|
-              if active_group?(group)
-                load_files(files, target, group, params: params)
-              end
+              load_files(files, target, group, params: params) if active_group?(group)
             end
-            if active_group?(target)
-              load_files(files, target, target, params: params)
-            end
+            load_files(files, target, target, params: params) if active_group?(target)
           end
         else
           command_line_patterns.each do |pattern|
             path = Pathname(pattern)
             path = project.absolute_path(path)
             next unless path.file?
-            if target = project.target_for_source_path(path)
+
+            if (target = project.target_for_source_path(path))
               params[:code_paths] << [target.name.to_s, path.to_s]
             end
-            if target = project.target_for_signature_path(path)
+            if (target = project.target_for_signature_path(path))
               params[:signature_paths] << [target.name.to_s, path.to_s]
             end
           end
@@ -164,19 +156,19 @@ module Steep
 
         loop do
           if Daemon.running?
-            stdout.puts unless dots_printed == 0
+            stdout.puts unless dots_printed.zero?
             return true
           end
 
           elapsed = Time.now - start_time
           if elapsed > timeout
-            stdout.puts unless dots_printed == 0
+            stdout.puts unless dots_printed.zero?
             Steep.logger.warn { "Daemon warm-up timed out after #{timeout}s" }
             return false
           end
 
           unless Daemon.starting?
-            stdout.puts unless dots_printed == 0
+            stdout.puts unless dots_printed.zero?
             Steep.logger.warn { "Daemon process died during warm-up" }
             return false
           end
