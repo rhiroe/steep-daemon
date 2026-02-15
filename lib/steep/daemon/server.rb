@@ -290,8 +290,8 @@ module Steep
 
       def sync_changed_files(master_writer, params)
         request_paths = [] # : Array[String]
-        (params[:code_paths] || []).each { |_, path| request_paths << path }
-        (params[:signature_paths] || []).each { |_, path| request_paths << path }
+        (params[:code_paths] || []).each { |_, path| request_paths << path } # rubocop:disable Style/MapIntoArray,Style/HashEachMethods
+        (params[:signature_paths] || []).each { |_, path| request_paths << path } # rubocop:disable Style/HashEachMethods
 
         changes_map = {} # : Hash[String, Symbol]
         @file_tracker.flush_pending_changes.each { |path, type| changes_map[path] = type }
@@ -322,7 +322,7 @@ module Steep
           end
         end
 
-        sig_dir = @project.base_dir + "sig"
+        sig_dir = @project.base_dir + "sig" # rubocop:disable Style/StringConcatenation
         if sig_dir.directory?
           sig_dir.glob("**/*.rbs").each { |p| paths << p.to_s if p.file? }
         end
