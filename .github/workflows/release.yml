@@ -42,6 +42,11 @@ jobs:
       - name: Run RuboCop
         run: bundle exec rubocop
 
+      - name: Prepare for release
+        run: |
+          bundle config set frozen false
+          bundle install
+
       - name: Publish to RubyGems
         uses: rubygems/release-gem@v1
         # Trusted Publishing - no API key needed if configured on RubyGems.org
