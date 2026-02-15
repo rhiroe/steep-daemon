@@ -34,7 +34,18 @@ jobs:
         uses: ruby/setup-ruby@v1
         with:
           ruby-version: '3.2'
-          bundler-cache: true
+          bundler-cache: false
+
+      - name: Install dependencies
+        run: bundle install
+
+      - name: Verify Gemfile.lock unchanged
+        run: |
+          if ! git diff --exit-code Gemfile.lock; then
+            echo "ERROR: Gemfile.lock was modified during bundle install!"
+            echo "This should not happen. The lock file should already be correct from bump-version workflow."
+            exit 1
+          fi
 
       - name: Run tests
         run: bundle exec rake test
