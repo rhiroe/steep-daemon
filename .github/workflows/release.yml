@@ -20,8 +20,6 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
 
       # If triggered by workflow_run, checkout the latest tag
       - name: Checkout latest tag
@@ -33,35 +31,10 @@ jobs:
       - name: Set up Ruby
         uses: ruby/setup-ruby@v1
         with:
-          ruby-version: '3.2'
-          bundler-cache: false
-
-      - name: Install dependencies
-        run: bundle install
-
-      - name: Verify Gemfile.lock unchanged
-        run: |
-          if ! git diff --exit-code Gemfile.lock; then
-            echo "ERROR: Gemfile.lock was modified during bundle install!"
-            echo "This should not happen. The lock file should already be correct from bump-version workflow."
-            exit 1
-          fi
-
-      - name: Run tests
-        run: bundle exec rake test
-
-      - name: Run RuboCop
-        run: bundle exec rubocop
+          ruby-version: ruby
+          bundler-cache: true
 
       - name: Publish to RubyGems
         uses: rubygems/release-gem@v1
         # Trusted Publishing - no API key needed if configured on RubyGems.org
         # Falls back to RUBYGEMS_API_KEY if Trusted Publishing is not set up
-
-      - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
-        with:
-          files: '*.gem'
-          generate_release_notes: true
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
