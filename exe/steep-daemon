@@ -1,0 +1,9 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+require_relative "../lib/steep/daemon/version"
+require_relative "../lib/steep/daemon/configuration"
+require_relative "../lib/steep/daemon"
+require_relative "../lib/steep/daemon/cli"
+
+Steep::Daemon::CLI.new(ARGV).run
