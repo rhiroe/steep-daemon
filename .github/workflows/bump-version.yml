@@ -82,6 +82,11 @@ jobs:
           sed -i 's/VERSION = ".*"/VERSION = "${{ steps.version.outputs.release_version }}"/' lib/steep/daemon/version.rb
           cat lib/steep/daemon/version.rb
 
+      - name: Update Gemfile.lock
+        run: |
+          bundle config set frozen false
+          bundle install
+
       - name: Generate CHANGELOG entry
         run: |
           # Get commits since last tag
@@ -93,11 +98,10 @@ jobs:
           fi
 
           # Prepare new CHANGELOG entry
-          new_entry="## [v${{ steps.version.outputs.release_version }}] - $(date +%Y-%m-%d)
-
-$commits
-
-"
+          new_entry=$(printf "## [v%s] - %s\n\n%s\n\n" \
+            "${{ steps.version.outputs.release_version }}" \
+            "$(date +%Y-%m-%d)" \
+            "$commits")
 
           # Update CHANGELOG.md
           if [ -f CHANGELOG.md ]; then
@@ -108,13 +112,7 @@ $commits
             ' CHANGELOG.md > CHANGELOG.tmp
             mv CHANGELOG.tmp CHANGELOG.md
           else
-            echo "# Changelog
-
-All notable changes to this project will be documented in this file.
-
-## [Unreleased]
-
-$new_entry" > CHANGELOG.md
+            printf "# Changelog\n\nAll notable changes to this project will be documented in this file.\n\n## [Unreleased]\n\n%s\n" "$new_entry" > CHANGELOG.md
           fi
 
       - name: Run tests
@@ -122,11 +120,10 @@ $new_entry" > CHANGELOG.md
 
       - name: Commit release version
         run: |
-          git add lib/steep/daemon/version.rb CHANGELOG.md
-          git commit -m "Release v${{ steps.version.outputs.release_version }}
-
-- Update version from ${{ steps.version.outputs.current_version }} to ${{ steps.version.outputs.release_version }}
-- Update CHANGELOG.md with release notes"
+          git add lib/steep/daemon/version.rb CHANGELOG.md Gemfile.lock
+          git commit -m "Release v${{ steps.version.outputs.release_version }}" \
+            -m "- Update version from ${{ steps.version.outputs.current_version }} to ${{ steps.version.outputs.release_version }}" \
+            -m "- Update CHANGELOG.md with release notes"
 
       - name: Create and push tag
         run: |
@@ -137,10 +134,11 @@ $new_entry" > CHANGELOG.md
       - name: Bump to next dev version
         run: |
           sed -i 's/VERSION = ".*"/VERSION = "${{ steps.version.outputs.next_dev_version }}"/' lib/steep/daemon/version.rb
-          git add lib/steep/daemon/version.rb
-          git commit -m "Bump version to ${{ steps.version.outputs.next_dev_version }}
-
-Prepare for next development cycle"
+          bundle config set frozen false
+          bundle install
+          git add lib/steep/daemon/version.rb Gemfile.lock
+          git commit -m "Bump version to ${{ steps.version.outputs.next_dev_version }}" \
+            -m "Prepare for next development cycle"
           git push origin main
 
       - name: Summary
