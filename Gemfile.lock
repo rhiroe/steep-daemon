@@ -1,7 +1,7 @@
 PATH
   remote: .
   specs:
-    steep-daemon (0.1.0)
+    steep-daemon (0.1.0.dev)
       listen (~> 3.0)
       steep (>= 1.0)
 

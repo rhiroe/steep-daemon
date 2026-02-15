@@ -1,0 +1,155 @@
+name: Bump Version
+
+on:
+  workflow_dispatch:
+    inputs:
+      version_type:
+        description: 'Version bump type'
+        required: true
+        type: choice
+        options:
+          - patch
+          - minor
+          - major
+      custom_version:
+        description: 'Custom version (optional, overrides version_type)'
+        required: false
+        type: string
+
+jobs:
+  bump:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.2'
+          bundler-cache: true
+
+      - name: Configure Git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Calculate new version
+        id: version
+        run: |
+          current_version=$(ruby -e "require './lib/steep/daemon/version'; puts Steep::Daemon::VERSION")
+          echo "Current version: $current_version"
+
+          # Remove .dev suffix if present
+          base_version="${current_version%.dev}"
+          echo "Base version: $base_version"
+
+          # Calculate release version
+          if [ -n "${{ inputs.custom_version }}" ]; then
+            release_version="${{ inputs.custom_version }}"
+          else
+            IFS='.' read -r major minor patch <<< "$base_version"
+            case "${{ inputs.version_type }}" in
+              major)
+                release_version="$((major + 1)).0.0"
+                ;;
+              minor)
+                release_version="${major}.$((minor + 1)).0"
+                ;;
+              patch)
+                release_version="${major}.${minor}.$((patch + 1))"
+                ;;
+            esac
+          fi
+
+          # Calculate next dev version (increment patch)
+          IFS='.' read -r major minor patch <<< "$release_version"
+          next_dev_version="${major}.${minor}.$((patch + 1)).dev"
+
+          echo "Release version: $release_version"
+          echo "Next dev version: $next_dev_version"
+          echo "current_version=$current_version" >> $GITHUB_OUTPUT
+          echo "release_version=$release_version" >> $GITHUB_OUTPUT
+          echo "next_dev_version=$next_dev_version" >> $GITHUB_OUTPUT
+
+      - name: Update version file for release
+        run: |
+          sed -i 's/VERSION = ".*"/VERSION = "${{ steps.version.outputs.release_version }}"/' lib/steep/daemon/version.rb
+          cat lib/steep/daemon/version.rb
+
+      - name: Generate CHANGELOG entry
+        run: |
+          # Get commits since last tag
+          last_tag=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+          if [ -z "$last_tag" ]; then
+            commits=$(git log --pretty=format:"- %s (%h)" --no-merges)
+          else
+            commits=$(git log ${last_tag}..HEAD --pretty=format:"- %s (%h)" --no-merges)
+          fi
+
+          # Prepare new CHANGELOG entry
+          new_entry="## [v${{ steps.version.outputs.release_version }}] - $(date +%Y-%m-%d)
+
+$commits
+
+"
+
+          # Update CHANGELOG.md
+          if [ -f CHANGELOG.md ]; then
+            # Insert after "## [Unreleased]" line
+            awk -v entry="$new_entry" '
+              /## \[Unreleased\]/ { print; print ""; print entry; next }
+              { print }
+            ' CHANGELOG.md > CHANGELOG.tmp
+            mv CHANGELOG.tmp CHANGELOG.md
+          else
+            echo "# Changelog
+
+All notable changes to this project will be documented in this file.
+
+## [Unreleased]
+
+$new_entry" > CHANGELOG.md
+          fi
+
+      - name: Run tests
+        run: bundle exec rake test
+
+      - name: Commit release version
+        run: |
+          git add lib/steep/daemon/version.rb CHANGELOG.md
+          git commit -m "Release v${{ steps.version.outputs.release_version }}
+
+- Update version from ${{ steps.version.outputs.current_version }} to ${{ steps.version.outputs.release_version }}
+- Update CHANGELOG.md with release notes"
+
+      - name: Create and push tag
+        run: |
+          git tag -a "v${{ steps.version.outputs.release_version }}" -m "Release v${{ steps.version.outputs.release_version }}"
+          git push origin main
+          git push origin "v${{ steps.version.outputs.release_version }}"
+
+      - name: Bump to next dev version
+        run: |
+          sed -i 's/VERSION = ".*"/VERSION = "${{ steps.version.outputs.next_dev_version }}"/' lib/steep/daemon/version.rb
+          git add lib/steep/daemon/version.rb
+          git commit -m "Bump version to ${{ steps.version.outputs.next_dev_version }}
+
+Prepare for next development cycle"
+          git push origin main
+
+      - name: Summary
+        run: |
+          echo "## Version Bump Complete! :rocket:" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- **Development Version:** ${{ steps.version.outputs.current_version }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Released Version:** ${{ steps.version.outputs.release_version }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Next Dev Version:** ${{ steps.version.outputs.next_dev_version }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Tag:** v${{ steps.version.outputs.release_version }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "The release workflow will automatically publish the gem to RubyGems." >> $GITHUB_STEP_SUMMARY

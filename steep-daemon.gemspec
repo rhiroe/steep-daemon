@@ -14,7 +14,7 @@ Gem::Specification.new do |spec|
                      "Provides 10-100x faster type checking for subsequent runs."
   spec.homepage = "https://github.com/rhiroe/steep-daemon"
   spec.license = "MIT"
-  spec.required_ruby_version = ">= 3.1.0"
+  spec.required_ruby_version = ">= 3.2.0"
 
   spec.metadata["homepage_uri"] = spec.homepage
   spec.metadata["source_code_uri"] = "https://github.com/rhiroe/steep-daemon"

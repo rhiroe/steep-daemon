@@ -210,6 +210,77 @@ With daemon:
 
 **Result**: 5x faster for typical projects, up to 100x faster for projects with heavy RBS dependencies!
 
+## Development
+
+After checking out the repo, run:
+
+```bash
+bundle install
+```
+
+### Running Tests
+
+```bash
+bundle exec rake test
+```
+
+### Running RuboCop
+
+```bash
+bundle exec rubocop
+```
+
+### Release Process
+
+This project uses GitHub Actions for automated releases:
+
+1. **Release Drafter** (Automatic):
+   - Automatically creates draft releases as PRs are merged
+   - Generates CHANGELOG from PR titles and labels
+   - Suggests version numbers based on PR labels (major/minor/patch)
+   - Auto-labels PRs based on branch names and changed files
+
+2. **Bump Version** (Manual trigger):
+   - Go to Actions → "Bump Version" workflow
+   - Select version type (patch/minor/major) or custom version
+   - Automatically:
+     - Removes `.dev` suffix for release
+     - Updates version and CHANGELOG
+     - Creates release commit and tag
+     - Bumps to next dev version
+
+3. **Publish to RubyGems** (Automatic on tag):
+   - Uses [Trusted Publishing](https://guides.rubygems.org/trusted-publishing/) (no API key needed!)
+   - Runs tests and RuboCop
+   - Publishes to RubyGems.org
+   - Creates GitHub Release
+
+### Local Development
+
+To test locally:
+
+```bash
+# Build the gem
+gem build steep-daemon.gemspec
+
+# Install locally
+gem install ./steep-daemon-0.1.0.gem
+
+# Test in another project
+cd /path/to/your/project
+steep-daemon start
+steep check
+```
+
+### Required Setup
+
+For automated releases:
+
+1. **Trusted Publishing** (Recommended): Configure on [RubyGems.org](https://rubygems.org) - No secrets needed!
+2. **API Key** (Fallback): Add `RUBYGEMS_API_KEY` secret if not using Trusted Publishing
+
+See [.github/RELEASE.md](.github/RELEASE.md) for detailed setup instructions.
+
 ## Contributing
 
 Bug reports and pull requests are welcome on GitHub at https://github.com/rhiroe/steep-daemon.
